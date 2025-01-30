@@ -28,6 +28,32 @@ from glob import iglob
 import gzip
 
 
+
+def GPT_annotation_genes(adata, leiden_key="leiden", top_n=10):
+    
+    sc.tl.rank_genes_groups(adata, groupby=leiden_key, method="wilcoxon")
+
+    marker_df = pd.DataFrame(
+        {cluster: adata.uns["rank_genes_groups"]["names"][cluster][:top_n]
+         for cluster in adata.uns["rank_genes_groups"]["names"].dtype.names}
+    )
+
+    output_lines = [
+        "Identify cell types of human periodontal ligament cells using the following markers separately for each row.",
+        "Only provide the cell type name. Do not show numbers before the name.",
+        "Some can be a mixture of multiple cell types."
+    ]
+
+    for cluster in marker_df.columns:
+        genes = ",".join(marker_df[cluster].tolist())
+        output_lines.append(f"{cluster}:{genes}")
+
+    formatted_output = "\n".join(output_lines)
+    return formatted_output
+
+
+
+
 def plot_umap_with_labels(
     adata,
     color_column,
