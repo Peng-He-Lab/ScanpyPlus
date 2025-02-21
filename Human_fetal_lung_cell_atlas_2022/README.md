@@ -9,7 +9,7 @@
 &nbsp;&nbsp;&nbsp;&nbsp;[ATAC-seq tracks](https://genome.ucsc.edu/s/brianpenghe/scATAC_fetal_lung20211206)
 #### [*in situ* staining Images](https://fetal-lung.cellgeni.sanger.ac.uk/figures.html)
 #### [Visium spatial transcriptomics](https://fetal-lung.cellgeni.sanger.ac.uk/visium.html)
-#### [RNA velocyto file](https://ucsf.box.com/s/8tlvf2m2c04p9o95wzwwt2nz9gro39y4)
+#### [RNA velocyto file](https://cellgeni.cog.sanger.ac.uk/fetal-lung/velocyto-001.h5ad)
 Alternatively, you can find our scRNA-seq data on [cellxgene.cziscience](https://cellxgene.cziscience.com/collections/2d2e2acd-dade-489f-a2da-6c11aa654028)
 
 # Our marker gene table
