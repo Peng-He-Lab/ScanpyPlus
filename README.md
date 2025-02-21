@@ -16,11 +16,12 @@ A human fetal lung cell atlas uncovers proximal-distal gradients of differentiat
 
 Among the functions in *Scanpyplus*, there's also a function to do feature gene selection (*DeepTree* algorithm). It removes garbage among highly variable genes, mitigate batch effect if you remove garbage batch by batch, and increases signal-to-noise ratio of the top PCs to promote rare cell type discovery.
 
-[Here](https://nbviewer.jupyter.org/github/brianpenghe/python-genomics/blob/master/DeepTree_algorithm_demo.ipynb) is a [notebook](https://github.com/brianpenghe/python-genomics/blob/master/DeepTree_algorithm_demo.ipynb) to use DeepTree algorithm to "de-noise" highly-variable genes and improve initial clustering. 
+[Here](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/DeepTree_algorithm_demo.ipynb) is a [notebook]
+(https://github.com/Peng-He-Lab/ScanpyPlus/tree/master/DeepTree_algorithm_demo.ipynb) to use DeepTree algorithm to "de-noise" highly-variable genes and improve initial clustering. 
 
 A *MATLAB* implementation can be found [here](https://github.com/brianpenghe/Matlab-genomics).
 
-This algorithm can be potentially used to reduce batch effect when fearing overcorrection, especially comparing conditions or time points. Two notebooks are provided showing "soft integration" of [fetal limb](https://nbviewer.jupyter.org/github/brianpenghe/python-genomics/blob/master/Soft_integration_limb.ipynb) and [pancreas](https://nbviewer.jupyter.org/github/brianpenghe/python-genomics/blob/master/Soft_integration_pancreas.ipynb) data.
+This algorithm can be potentially used to reduce batch effect when fearing overcorrection, especially comparing conditions or time points. Two notebooks are provided showing "soft integration" of [fetal limb](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/Soft_integration_limb.ipynb) and [pancreas](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/Soft_integration_pancreas.ipynb) data.
 
 ## Doublet Cluster Labeling (DouCLing)
 ![unnamed](https://user-images.githubusercontent.com/4110443/146441371-e7b4bec2-9e87-4a9d-98ad-3f3401ce13ed.jpg)
@@ -34,7 +35,7 @@ Cross-sample doublets can usually be identified by hastags or genetic background
 Heterotypic doublets can sometimes trick data scientists into thinking they are a new type of dual-feature cell type like NKT cells etc. 
 Heterotypic doublets are usually identified by matching individual cells to synthetic doublets regardless of manually curated clusters. Algorithms like Scrublet can remove a substantial part of doublet cells but not all of them. The survivor doublets can still aggregate into tiny clusters picked up by the annotaters when doing subclustering. Doublets of rarer cell types are also often missed, which obscures the discoveries of new cell types and states.
 To leverage the input from biologists' manual parsing and the increased sensitivity of cluster-average signatures, I introduce here an alternative approach to facilitate heterotypic doublet cluster identification. This approach scans through individual tiny clusters and look for its "Parent 2" that gives it a unique feature that's different from its sibling subclusters sharing the same "Parent 1". 
-[A notebook using published PBMC data](https://nbviewer.jupyter.org/github/brianpenghe/python-genomics/blob/master/DOUblet_Cluster_Labeling.ipynb) is provided.
+[A notebook using published PBMC data](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/DOUblet_Cluster_Labeling.ipynb) is provided.
 
 <details>
   <summary><b>Other functions in Scanpyplus:</b></summary>
