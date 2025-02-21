@@ -21,7 +21,7 @@ Among the functions in *Scanpyplus*, there's also a function to do feature gene 
 
 A *MATLAB* implementation can be found [here](https://github.com/brianpenghe/Matlab-genomics).
 
-This algorithm can be potentially used to reduce batch effect when fearing overcorrection, especially comparing conditions or time points. Two notebooks are provided showing "soft integration" of [fetal limb](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/Soft_integration_limb.ipynb) and [pancreas](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/Soft_integration_pancreas.ipynb) data.
+This algorithm can be potentially used to reduce batch effect when fearing overcorrection, especially comparing conditions or time points. Two notebooks are provided showing "soft integration" of [embryonic limb](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/Soft_integration_limb.ipynb) and [pancreas](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/Soft_integration_pancreas.ipynb) data.
 
 ## Doublet Cluster Labeling (DouCLing)
 ![unnamed](https://user-images.githubusercontent.com/4110443/146441371-e7b4bec2-9e87-4a9d-98ad-3f3401ce13ed.jpg)
