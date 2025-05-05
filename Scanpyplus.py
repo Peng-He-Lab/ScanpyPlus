@@ -177,19 +177,31 @@ def Plot3DimUMAP(adata,obsKey='leiden',obsmKey='X_umap'):
                               line=dict(width=0,
                                         color='black')))
     return fig
+    
+def ScanpySankey(adata,var1,var2,aspect=20,fontsize=12, figureName="cell type",
+                 leftLabels=['Default'], rightLabels=['Default']):
+    
+    from pySankey.sankey import sankey #correct import command
+    import pandas as pd
+    
+    df = adata.obs[[var1, var2]].dropna()
+    left = df[var1]
+    right = df[var2]
 
-def ScanpySankey(adata,var1,var2,aspect=20,
-                fontsize=12, figureName="cell type", leftLabels=['Default'],
-    rightLabels=['Default']):
-    from pysankey import sankey
     colordict={**ExtractColor(adata,var1,str),
-               **ExtractColor(adata,var2,str)}
-    if 'Default' in leftLabels:
-        leftLabels=sorted(adata.obs[var1].unique().tolist())
-    if 'Default' in rightLabels:
-        rightLabels=sorted(adata.obs[var2].unique().tolist())
-    return sankey(adata.obs[var1],adata.obs[var2],aspect=aspect,colorDict=colordict,
-fontsize=fontsize,figureName=figureName,leftLabels=leftLabels,rightLabels=rightLabels)
+               **ExtractColor(adata,var2,str)}  
+    #Ensure type conforming
+    if leftLabels == ['Default']:
+        leftLabels = sorted(df[var1].unique().tolist())
+    else:
+        leftLabels = sorted(df[var1].dtype.type(x) for x in leftLabels)
+    
+    if rightLabels == ['Default']:
+        rightLabels = sorted(df[var2].unique().tolist())
+    else:
+        rightLabels = sorted(df[var2].dtype.type(x) for x in rightLabels)
+  
+    return sankey(left,right,aspect=aspect,fontsize=fontsize,figure_name=figureName) # removed contradictory argument for left right/label which caused pysankey function error due to reindexing
 
 def iRODS_stats_starsolo(samples):
     #samples should be a list of library IDs
