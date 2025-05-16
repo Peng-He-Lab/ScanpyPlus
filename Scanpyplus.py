@@ -26,7 +26,8 @@ from scipy import sparse
 from scipy import cluster
 from glob import iglob
 import gzip
-
+import networkx as nx
+from upsetplot import UpSet
 
 
 def GPT_annotation_genes(adata, leiden_key="leiden", top_n=10):
@@ -50,9 +51,6 @@ def GPT_annotation_genes(adata, leiden_key="leiden", top_n=10):
 
     formatted_output = "\n".join(output_lines)
     return formatted_output
-
-
-
 
 def plot_umap_with_labels(
     adata,
@@ -1098,3 +1096,132 @@ def ClusterGenes(adata,num_pcs=50,embedding='tsne'):
     #bdata.obs['s_genes'] = [i in s_genes for i in bdata.obs_names]
     #bdata.obs['g2m_genes'] = [i in g2m_genes for i in bdata.obs_names]
     return bdata
+
+def OverlapBarcode(adatas, samplename):
+    #Function to identify and handle overlapping barcodes between different samples in single-cell data.
+    #Parameters:
+    #adatas: list of AnnData objects
+    #samplename: list of str (List of sample names corresponding to each AnnData object)
+    #Returns:dict
+    barcode_dict = {}
+    # For each AnnData object and corresponding sample name
+    for i, (adata, sample) in enumerate(zip(adatas, samplename)):
+        # Extract barcodes from the AnnData object
+        barcodes = pd.Index([i.split('-')[0] for i in adata.obs_names])
+        
+        # Store the barcodes in the dictionary
+        barcode_dict[sample] = barcodes
+    # Create a dataframe to store overlap information
+    overlap_matrix = pd.DataFrame(0, index=samplename, columns=samplename)
+    # Calculate overlaps between samples
+    for i, sample1 in enumerate(samplename):
+        for j, sample2 in enumerate(samplename):
+            if i != j:
+                # Calculate overlap by intersecting barcodes
+                overlap = len(set(barcode_dict[sample1]).intersection(set(barcode_dict[sample2])))
+                overlap_matrix.loc[sample1, sample2] = overlap
+    # Create a results dictionary
+    results = {
+        'barcode_dict': barcode_dict,
+        'overlap_matrix': overlap_matrix,
+        'overlap_percentage': overlap_matrix.div(overlap_matrix.sum(axis=1), axis=0) * 100
+    }
+    return results
+
+def show_graph_with_labels(adjacency_matrix):
+    rows, cols = np.where(adjacency_matrix.values >= 0.9)
+    edges = zip(rows.tolist(), cols.tolist())
+    gr = nx.Graph()
+    gr.add_edges_from(edges)
+    nx.draw(gr, node_size=100, 
+            labels={i : adjacency_matrix.index.values.tolist()[i] for i in range(0, len(adjacency_matrix.index.values) ) }, 
+            with_labels=True)
+    plt.show()
+
+def DF2Ann(DF):
+    #This function converts a dataframe to AnnData
+    #Make sure to transpose if needed
+    return(anndata.AnnData(DF))
+
+def UpSetFromLists(listOflist,labels,size_height=3,showplot=True):
+    from upsetplot import UpSet
+    listall=list(set([j for i in listOflist for j in i]))
+    temp=pd.Series(listall,index=listall)
+    temp2=pd.concat([temp.isin(i) for i in listOflist+[temp]],axis=1)
+    temp2.columns=labels+['all']
+    temp2=temp2.set_index(labels)
+    upset = UpSet(temp2,subset_size='count', intersection_plot_elements=3)
+    if showplot is True:
+        upset.plot()
+    return upset
+
+def zscore(DF,dropna=True,axis=1):
+    output=pd.DataFrame(scipy.stats.zscore(DF.values,axis=1),
+             index=DF.index,
+            columns=DF.columns)
+    if dropna==True:
+        return output.dropna(axis=1-axis)
+    return output
+
+def Ginni(beta):
+    #beta is a DataFrame with columns of distributions
+    beta.loc['Ginni']=[np.abs(np.subtract.outer(beta.loc[:,i].values,\
+               beta.loc[:,i].values)).mean()/np.mean(beta.loc[:,i].values)*0.5 for i in beta.columns]
+    return beta
+
+def cellphonedb_p2adjMat(cpdb_p_loc='pvalues.txt',pval=0.05):
+    # This function reads the p-value file from the cellphonedb output and generates a matrix file 
+    #with significant pairs only
+    cpdb_p=pd.read_csv(cpdb_p_loc,sep='\t')
+    cellpairs=pd.Series(cpdb_p.iloc[0,11:].index).str.split('|',expand=True)
+    cell0=cellpairs.loc[:,0].unique()
+    cell1=cellpairs.loc[:,1].unique()
+    InterMat=pd.DataFrame('',index=cell0,columns=cell1)
+    for i in cell0:
+        for j in cell1:
+            InterMat.loc[i,j]= '|'.join(cpdb_p.loc[cpdb_p.loc[:,i+'|'+j]<pval,
+                                               'interacting_pair'].tolist())
+    InterMat.to_csv(cpdb_p_loc+'.pairs'+str(pval)+'.csv')
+    return InterMat
+
+def cellphonedb_n_interaction_Mat(cpdb_p_loc='pvalues.txt',pval=0.05):
+    # This function reads the p-value file from the cellphonedb output and generates a matrix file 
+    #with significant pairs only
+    cpdb_p=pd.read_csv(cpdb_p_loc,sep='\t')
+    cellpairs=pd.Series(cpdb_p.iloc[0,11:].index).str.split('|',expand=True)
+    cell0=cellpairs.loc[:,0].unique()
+    cell1=cellpairs.loc[:,1].unique()
+    InterMat=pd.DataFrame(0,index=cell0,columns=cell1)
+    for i in cell0:
+        for j in cell1:
+            InterMat.loc[i,j]= len(cpdb_p.loc[cpdb_p.loc[:,i+'|'+j]<pval,
+                                               'interacting_pair'])
+    InterMat.to_csv(cpdb_p_loc+'.n_pairs'+str(pval)+'.csv')
+    return InterMat
+
+def cellphonedb_mat_per_interaction(interacting_pair,cpdb_p_loc='pvalues.txt'):
+    # This function returns a matrix of celltype-celltype interaction p-values for a specific interaction pair
+    cpdb_p=pd.read_csv(cpdb_p_loc,sep='\t')
+    cellpairs=pd.Series(cpdb_p.iloc[0,11:].index).str.split('|',expand=True)
+    cell0=cellpairs.loc[:,0].unique()
+    cell1=cellpairs.loc[:,1].unique()
+    InterMat=pd.DataFrame(0,index=cell0,columns=cell1)
+    for i in cell0:
+        for j in cell1:
+            InterMat.loc[i,j]= cpdb_p.loc[cpdb_p.loc[:,'interacting_pair'].isin([interacting_pair]),i+'|'+j].values
+    InterMat.to_csv(cpdb_p_loc+'.pairs'+interacting_pair+'.csv')
+    return InterMat
+
+def ListsOverlap(A,B):
+    #This function is written by ChatGPT to explore the overlapping element counts between each list in A and each list in B
+    #A and B are both lists of lists
+    counts = []
+    for a_list in A:
+        row = []
+        for b_list in B:
+            shared = len(set(a_list).intersection(b_list))
+            row.append(shared)
+        counts.append(row)
+    df = pd.DataFrame(counts, columns=["B" + str(i+1) for i in range(len(B))], index=["A" + str(i+1) for i in range(len(A))])
+    return df
+
