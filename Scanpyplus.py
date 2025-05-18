@@ -26,7 +26,7 @@ from scipy import sparse
 from scipy import cluster
 from glob import iglob
 import gzip
-
+from typing import List, Union, Optional, Tuple, Callable
 
 
 def GPT_annotation_genes(adata, leiden_key="leiden", top_n=10):
