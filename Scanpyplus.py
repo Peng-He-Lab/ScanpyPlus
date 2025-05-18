@@ -1474,7 +1474,7 @@ def read_numbered_folders(
         **kwargs
     )
 
-    def run_celltypist(
+def run_celltypist(
     adata: anndata.AnnData,
     model_name: str,
     output_prefix: str = None,
