@@ -28,7 +28,7 @@ from glob import iglob
 import gzip
 import networkx as nx
 from upsetplot import UpSet
-
+from typing import List, Union, Optional, Tuple, Callable
 
 def GPT_annotation_genes(adata, leiden_key="leiden", top_n=10):
     
@@ -1225,3 +1225,357 @@ def ListsOverlap(A,B):
     df = pd.DataFrame(counts, columns=["B" + str(i+1) for i in range(len(B))], index=["A" + str(i+1) for i in range(len(A))])
     return df
 
+def read_folder(
+    base_dir: str,
+    data_pattern: str = "filtered_feature_bc_matrix.h5",
+    dirs: Optional[List[str]] = None,
+    dir_pattern: Optional[str] = None,
+    dir_filter: Optional[Callable[[str], bool]] = None,
+    batch_key: str = 'sample',
+    concat: bool = False,
+    save_counts: bool = True,
+    verbose: bool = True,
+    **kwargs
+) -> Union[List[sc.AnnData], sc.AnnData]:
+    """
+    Load data files from directories and convert them to AnnData objects.
+    Flexibly handles different directory organizations and file types.
+    
+    Parameters
+    ----------
+    base_dir : str
+        Base directory containing subdirectories with data files.
+    data_pattern : str, optional (default: "filtered_feature_bc_matrix.h5")
+        Filename pattern to search for within each directory.
+    dirs : List[str], optional
+        Explicit list of subdirectory names to process. If provided, only these directories 
+        will be processed.
+    dir_pattern : str, optional
+        Pattern to match subdirectory names. If provided, only directories matching this
+        pattern will be processed. Can use * as wildcard.
+    dir_filter : Callable[[str], bool], optional
+        Function that takes a directory name and returns True if it should be processed.
+    batch_key : str, optional (default: 'sample')
+        Name of the column in obs to store the sample/batch information.
+    concat : bool, optional (default: False)
+        Whether to concatenate all AnnData objects into a single one.
+    save_counts : bool, optional (default: True)
+        Whether to save raw counts in .layers["counts"].
+    verbose : bool, optional (default: True)
+        Whether to print progress information.
+    **kwargs
+        Additional keyword arguments to pass to read functions like sc.read_10x_h5.
+        
+    Returns
+    -------
+    Union[List[sc.AnnData], sc.AnnData]
+        List of AnnData objects or a concatenated AnnData object.
+        
+    Examples
+    --------
+    >>> import scanpyplus as scp
+    >>> 
+    >>> # Basic usage - automatically find and load all data directories
+    >>> adatas = scp.read_folder("/path/to/datasets")
+    >>> 
+    >>> # Specify exact directories to load
+    >>> adatas = scp.read_folder(
+    ...     base_dir="/path/to/datasets", 
+    ...     dirs=["sample1", "sample2", "sample7"]
+    ... )
+    >>> 
+    >>> # Use pattern matching for directories (all directories starting with "donor")
+    >>> adatas = scp.read_folder(
+    ...     base_dir="/path/to/datasets",
+    ...     dir_pattern="donor*"
+    ... )
+    >>> 
+    >>> # Use a custom filter function (only even-numbered directories)
+    >>> adatas = scp.read_folder(
+    ...     base_dir="/path/to/datasets",
+    ...     dir_filter=lambda d: d.isdigit() and int(d) % 2 == 0
+    ... )
+    >>> 
+    >>> # Load and concatenate all datasets into one AnnData object
+    >>> adata_combined = scp.read_folder(
+    ...     base_dir="/path/to/datasets", 
+    ...     concat=True
+    ... )
+    """
+    import fnmatch
+    
+    # Determine which subdirectories to process
+    all_subdirs = [d for d in os.listdir(base_dir) 
+                  if os.path.isdir(os.path.join(base_dir, d))]
+    
+    # Filter the directories based on provided parameters
+    if dirs is not None:
+        # Use explicitly provided directory list
+        filtered_dirs = [d for d in all_subdirs if d in dirs]
+    elif dir_pattern is not None:
+        # Use pattern matching for directories
+        filtered_dirs = fnmatch.filter(all_subdirs, dir_pattern)
+    elif dir_filter is not None:
+        # Use custom filter function
+        filtered_dirs = [d for d in all_subdirs if dir_filter(d)]
+    else:
+        # Use all subdirectories
+        filtered_dirs = all_subdirs
+    
+    if verbose:
+        print(f"Found {len(filtered_dirs)} directories to process")
+    
+    adatas = []
+    
+    # Load each dataset
+    for idx, dir_name in enumerate(filtered_dirs):
+        if verbose:
+            print(f"\nProcessing directory {idx+1}/{len(filtered_dirs)}: {dir_name}")
+        
+        dir_path = os.path.join(base_dir, dir_name)
+        
+        # Check for the data file
+        data_file = None
+        
+        # Direct match
+        potential_file = os.path.join(dir_path, data_pattern)
+        if os.path.exists(potential_file):
+            data_file = potential_file
+        else:
+            # Try to find matching files
+            for file in os.listdir(dir_path):
+                if fnmatch.fnmatch(file, data_pattern):
+                    data_file = os.path.join(dir_path, file)
+                    break
+        
+        if data_file is None:
+            if verbose:
+                print(f"Warning: Could not find data file matching '{data_pattern}' in {dir_path}. Skipping.")
+            continue
+        
+        # Load the data based on file extension
+        try:
+            if data_file.endswith('.h5'):
+                adata = sc.read_10x_h5(data_file, **kwargs)
+            elif data_file.endswith('.mtx') or data_file.endswith('.mtx.gz'):
+                mtx_dir = os.path.dirname(data_file)
+                adata = sc.read_10x_mtx(mtx_dir, **kwargs)
+            else:
+                if verbose:
+                    print(f"Warning: Unsupported file format for {data_file}. Attempting to use scanpy's read function.")
+                adata = sc.read(data_file, **kwargs)
+        except Exception as e:
+            if verbose:
+                print(f"Error loading {data_file}: {str(e)}. Skipping.")
+            continue
+        
+        # Basic preprocessing
+        adata.var_names_make_unique()
+        
+        # Save a copy of counts in layers
+        if save_counts:
+            adata.layers["counts"] = adata.X.copy()
+        
+        # Add sample information
+        adata.obs[batch_key] = dir_name
+        
+        # Add to list
+        adatas.append(adata)
+        if verbose:
+            print(f"Added {dir_name} dataset with {adata.n_obs} cells and {adata.n_vars} genes")
+        
+        # Free memory
+        gc.collect()
+    
+    if not adatas:
+        if verbose:
+            print("No datasets were successfully loaded.")
+        return []
+    
+    # Return either a list or concatenated AnnData
+    if concat and len(adatas) > 0:
+        if verbose:
+            print("\nConcatenating datasets...")
+        return sc.concat(adatas, join='outer', index_unique='-')
+    else:
+        return adatas
+
+def read_numbered_folders(
+    base_dir: str,
+    min_dir: int = 1,
+    max_dir: int = 100,
+    exclude_dirs: Optional[List[str]] = None,
+    data_pattern: str = "filtered_feature_bc_matrix.h5",
+    concat: bool = False,
+    save_counts: bool = True,
+    verbose: bool = True,
+    **kwargs
+) -> Union[List[sc.AnnData], sc.AnnData]:
+    """
+    Load data from numbered folders (specific case of read_folder).
+    
+    This is a convenience function that handles the common case of
+    having numbered directories and wanting to include or exclude specific ones.
+    
+    Parameters
+    ----------
+    base_dir : str
+        Base directory containing numbered subdirectories.
+    min_dir : int, optional (default: 1)
+        Minimum directory number to include.
+    max_dir : int, optional (default: 100)
+        Maximum directory number to include.
+    exclude_dirs : List[str], optional
+        List of directory names to exclude.
+    data_pattern : str, optional (default: "filtered_feature_bc_matrix.h5")
+        Filename pattern to search for within each directory.
+    concat : bool, optional (default: False)
+        Whether to concatenate all AnnData objects.
+    save_counts : bool, optional (default: True)
+        Whether to save raw counts in .layers["counts"].
+    verbose : bool, optional (default: True)
+        Whether to print progress information.
+    **kwargs
+        Additional keyword arguments to pass to read functions.
+        
+    Returns
+    -------
+    Union[List[sc.AnnData], sc.AnnData]
+        List of AnnData objects or a concatenated AnnData object.
+        
+    Examples
+    --------
+    >>> import scanpyplus as scp
+    >>> 
+    >>> # Load datasets from numbered directories, excluding specific ones
+    >>> adatas = scp.read_numbered_folders(
+    ...     base_dir="/path/to/datasets",
+    ...     exclude_dirs=['1', '2', '3', '4', '5', '6', '15', '16', '17', '18']
+    ... )
+    """
+    # Generate a list of all directories to process
+    all_dirs = [str(i) for i in range(min_dir, max_dir + 1)]
+    
+    # Filter out excluded directories
+    if exclude_dirs is not None:
+        exclude_dirs_int = [int(d) for d in exclude_dirs]
+        filtered_dirs = [d for d in all_dirs if int(d) not in exclude_dirs_int]
+    else:
+        filtered_dirs = all_dirs
+    
+    # Use the more general read_folder function
+    return read_folder(
+        base_dir=base_dir,
+        data_pattern=data_pattern,
+        dirs=filtered_dirs,  # Pass our filtered list
+        concat=concat,
+        save_counts=save_counts,
+        verbose=verbose,
+        **kwargs
+    )
+
+    def run_celltypist(
+    adata: anndata.AnnData,
+    model_name: str,
+    output_prefix: str = None,
+    majority_voting: bool = True, 
+    plot_umap: bool = True,
+    plot_size: int = 10,
+    figsize: tuple = (16, 16),
+    legend_loc: str = 'on data',
+    color_map = None,
+    save_plot: bool = True,
+    plot_file_prefix: str = None,
+    dpi: int = 300,
+    **kwargs
+):
+    try:
+        import celltypist
+        from celltypist import models
+    except ImportError:
+        raise ImportError("The celltypist package is required for this function. "
+                         "Please install it with 'pip install celltypist'.")
+    import matplotlib.pyplot as plt
+    import matplotlib.colors
+    
+    # Create output prefix string for column names
+    prefix = "" if output_prefix is None else output_prefix
+    
+    # Check if there's a UMAP embedding
+    if plot_umap and 'X_umap' not in adata.obsm_keys():
+        print("Warning: No UMAP embedding found. Cannot create UMAP plot.")
+        plot_umap = False
+    
+    # Load the model
+    try:
+        # Try to load as a model name from celltypist catalog
+        model = models.Model.load(model=model_name)
+        print(f"Loaded model {model_name} from celltypist catalog")
+    except:
+        # If that fails, try to load it as a file path
+        try:
+            model = models.Model.load(model_file=model_name)
+            print(f"Loaded model from file: {model_name}")
+        except:
+            raise ValueError(f"Could not load model '{model_name}'. "
+                           f"Check that the model name is correct or that the file path exists.")
+    
+    # Run celltypist
+    result = celltypist.annotate(adata, model=model_name, majority_voting=majority_voting, **kwargs)
+    
+    # Get the annotated AnnData
+    adata_annotated = result.to_adata()
+    
+    # Copy the results with the provided prefix
+    adata_annotated.obs[f'{prefix}predicted_labels'] = adata_annotated.obs['predicted_labels'].copy()
+    if majority_voting:
+        adata_annotated.obs[f'{prefix}majority_voting'] = adata_annotated.obs['majority_voting'].copy()
+    
+    # Create the UMAP visualization if requested
+    if plot_umap:
+        # Set up color palette
+        if color_map is None:
+            color_map = list(matplotlib.colors.CSS4_COLORS.values())
+        
+        # Create file prefix for plots
+        if plot_file_prefix is None:
+            plot_file_prefix = prefix if prefix else "celltypist"
+        
+        # Plot UMAP with predicted labels
+        fig, ax = plt.subplots(figsize=figsize)
+        sc.pl.umap(
+            adata_annotated, 
+            color=[f'{prefix}predicted_labels'],  
+            ax=ax, 
+            size=plot_size, 
+            legend_loc=legend_loc,
+            palette=color_map,
+            show=False
+        )
+        plt.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
+        
+        if save_plot:
+            plt.savefig(f'{plot_file_prefix}_predicted_labels_umap.png', dpi=dpi, bbox_inches='tight')
+        
+        plt.show()
+        
+        # Plot UMAP with majority voting if enabled
+        if majority_voting:
+            fig, ax = plt.subplots(figsize=figsize)
+            sc.pl.umap(
+                adata_annotated, 
+                color=[f'{prefix}majority_voting'],  
+                ax=ax, 
+                size=plot_size, 
+                legend_loc=legend_loc,
+                palette=color_map,
+                show=False
+            )
+            plt.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
+            
+            if save_plot:
+                plt.savefig(f'{plot_file_prefix}_majority_voting_umap.png', dpi=dpi, bbox_inches='tight')
+            
+            plt.show()
+    
+    return adata_annotated
