@@ -182,7 +182,6 @@ def ScanpySankey(adata,var1,var2,aspect=20,fontsize=12, figureName="cell type",
                  leftLabels=['Default'], rightLabels=['Default']):
     
     from pySankey.sankey import sankey #correct import command
-    import pandas as pd
     
     df = adata.obs[[var1, var2]].dropna()
     left = df[var1]
@@ -527,8 +526,10 @@ embedding='X_umap'):
 #(temp1.logfoldchanges > math.log(min_fold_change)) & (temp1.pct2 <= max_out_group_fraction),:].index.tolist()
     sc.pl.embedding(adata,basis=embedding,color=GeneList+obslist,
            color_map = 'jet',use_raw=use_raw)
+    sc.tl.dendrogram(adata, groupby=obs, var_names=GeneList)
+
     sc.pl.dotplot(adata,var_names=GeneList,
-             groupby=obs,use_raw=use_raw,standard_scale='var')
+             groupby=obs,use_raw=use_raw,standard_scale='var', dendrogram=True)
     sc.pl.stacked_violin(adata[adata.obs[obs].isin([celltype,reference]),:],var_names=GeneList,groupby=obs,
            swap_axes=True)
     del adata.uns['rank_genes_groups']
@@ -1110,3 +1111,89 @@ def ClusterGenes(adata,num_pcs=50,embedding='tsne'):
     #bdata.obs['s_genes'] = [i in s_genes for i in bdata.obs_names]
     #bdata.obs['g2m_genes'] = [i in g2m_genes for i in bdata.obs_names]
     return bdata
+
+def ConvertString(adata, columns_to_convert):
+# Convert defined columns in anndata.obs to string, provide a list of columns' names
+
+    for col in columns_to_convert:
+        if col in adata.obs.columns:
+            adata.obs[col] = adata.obs[col].astype(str)
+
+def PlotCrosstab(
+    adata, row_key='celltype', col_key='fine_annotation', 
+    title="Confusion Matrix", outfile="confusion_matrix.png"):
+#Creates a confusion matrix reindexed and containing all the categories even if they do not exist for consistency.
+
+    row_vals = adata.obs[row_key].astype(str)
+    col_vals = adata.obs[col_key].astype(str)
+
+    row_categories = row_vals.unique()
+    col_categories = col_vals.unique()
+
+    conf_mat = pd.crosstab(
+        row_vals,
+        col_vals,
+        rownames=[row_key],
+        colnames=[col_key]
+    ).reindex(index=row_categories, columns=col_categories, fill_value=0)
+
+    fig_height = max(10, 0.5 * len(conf_mat.index))
+    fig_width = max(12, 0.3 * len(conf_mat.columns))
+
+    plt.figure(figsize=(fig_width, fig_height))
+    sns.heatmap(conf_mat, annot=True, fmt="d", cmap="Blues")
+    plt.xlabel(col_key)
+    plt.ylabel(row_key)
+    plt.title(title)
+    plt.tight_layout()
+    plt.savefig(outfile, format="png")
+    plt.show()
+
+def QC(adata, species="human", mt_prefix=None,
+    log1p=True, inplace=True):
+# Annotates mt, ribo and hb genes based on species name: "human" or "mouse", and calculated QC metrics while storing them in th anndata.obs    
+    if mt_prefix is None:
+        mt_prefix = "MT-" if species.lower() == "human" else "mt-"
+
+    # Gene category annotations
+    adata.var["mt"] = adata.var_names.str.upper().str.startswith(mt_prefix.upper())
+    adata.var["ribo"] = adata.var_names.str.upper().str.startswith(("RPS", "RPL"))
+    adata.var["hb"] = adata.var_names.str.upper().str.contains(r"^HB[^P]")
+
+    # Calculate QC metrics
+    sc.pp.calculate_qc_metrics(
+        adata, qc_vars=["mt", "ribo", "hb"], log1p=log1p,inplace=inplace)
+
+def MapCategories(adata, key, corrections_dict):
+# Mapping old categories to new names based on corrections_dict and the adata.obs['key'] column. Column needs to be category. Also, adds new categories to category's keys. Requires a mapping dictionary.
+ 
+    adata.obs[key] = adata.obs[key].cat.rename_categories(corrections_dict)
+
+def dropmeta(adata, columns_to_drop):
+#Wrapper around adata.obs.drop for deleting specified columns from anndata. Takes a list of columns names.
+    
+    existing_cols = [col for col in columns_to_drop if col in adata.obs.columns]
+    if existing_cols:
+        adata.obs.drop(columns=existing_cols, inplace=True)
+
+def SubclusterAll(adata, parent_key="leiden", resolution=0.3, result_key="leiden_R", clusters_to_use=None):
+#Creates subclusters of defined clusters or all clusters and provides hierarchical labeling based on the parent's cluster name.
+    
+    adata.obs[result_key] = adata.obs[parent_key].astype(str)
+    all_clusters = adata.obs[parent_key].unique().tolist()
+    clusters = clusters_to_use if clusters_to_use is not None else all_clusters
+    
+# Iterate over each cluster
+    for cluster in clusters:
+        # Subset the data for the current cluster
+        mask = adata.obs[parent_key] == cluster
+        sub_adata = adata[mask].copy()
+
+        sc.tl.leiden(sub_adata, resolution=resolution, key_added="leiden_subcluster")
+
+        subcluster_labels = [
+            f"{cluster}_{label}" for label in sub_adata.obs["leiden_subcluster"]
+        ]
+
+        # Assign hierarchical labels to original adata
+        adata.obs.loc[mask, result_key] = subcluster_labels
