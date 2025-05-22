@@ -1579,3 +1579,180 @@ def run_celltypist(
             plt.show()
     
     return adata_annotated
+    
+def extract_barcode_prefix(barcode: str) -> str:
+    """extract the prefix from a barcode string"""
+    return barcode.split('-')[0] if '-' in barcode else barcode
+
+def import_souporcell(
+    adata: anndata.AnnData,
+    clusters_file: str,
+    genome_file: Optional[str] = None,
+    counts_matrix_file: Optional[str] = None,
+    prefix: str = '',
+    barcode_col: int = 0,
+    assignment_col: int = 1,
+    status_col: int = 2,
+    add_status: bool = True,
+    doublet_status: str = 'doublet',
+    unassigned_status: str = 'unassigned',
+    verbose: bool = True
+) -> anndata.AnnData:
+    """
+    Import cell type assignments and status information from Souporcell output files into an AnnData object
+    
+    Parameters:
+        adata: AnnData object to add Souporcell results to
+        clusters_file: Path to the Souporcell clusters file
+        genome_file: Path to the Souporcell genome file (optional)
+        counts_matrix_file: Path to the Souporcell counts matrix file (optional)
+        prefix: Prefix to add to AnnData obs column names
+        barcode_col: Index of the barcode column
+        assignment_col: Index of the assignment column
+        status_col: Index of the status column
+        add_status: Whether to add status information
+        doublet_status: Status value indicating doublets
+        unassigned_status: Status value indicating unassigned cells
+        verbose: Whether to display detailed output information
+        
+    Returns:
+        Updated AnnData object
+    """
+    # Import necessary libraries
+    import pandas as pd
+    import numpy as np
+    import os
+    from typing import Optional
+    import anndata
+
+    # Check if files exist
+    required_files = [(clusters_file, "Clusters")]
+    optional_files = [(genome_file, "Genome"), (counts_matrix_file, "Counts matrix")]
+    
+    for file_path, file_type in required_files:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"{file_type} file not found: {file_path}")
+            
+    for file_path, file_type in optional_files:
+        if file_path is not None and not os.path.exists(file_path):
+            raise FileNotFoundError(f"{file_type} file not found: {file_path}")
+    
+    # Read clusters file    
+    if verbose:
+        print(f"Reading Souporcell clusters file: {clusters_file}")
+    
+    try:
+        # Try to read the clusters file using pands
+        clusters_df = pd.read_csv(clusters_file, sep='\t', header=None)
+        
+        # extract relevant columns
+        barcodes = clusters_df.iloc[:, barcode_col].values
+        assignments = clusters_df.iloc[:, assignment_col].values
+        
+        # extract status if needed
+        if add_status and status_col < clusters_df.shape[1]:
+            status = clusters_df.iloc[:, status_col].values
+        else:
+            status = None
+            
+    except Exception as e:
+        print(f"Error reading clusters file: {str(e)}")
+        print("Attempting alternative parsing method...")
+        
+        # Fallback to manual parsing
+        barcodes = []
+        assignments = []
+        status = [] if add_status else None
+        
+        with open(clusters_file, 'r') as f:
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) > barcode_col:
+                    barcodes.append(parts[barcode_col])
+                if len(parts) > assignment_col:
+                    assignments.append(parts[assignment_col])
+                if add_status and len(parts) > status_col:
+                    status.append(parts[status_col])
+    
+    # Process barcodes to extract prefixes
+    processed_barcodes = [extract_barcode_prefix(bc) for bc in barcodes]
+    
+    # Create a mapping from barcodes to assignments
+    barcode_to_assignment = dict(zip(processed_barcodes, assignments))
+    
+    # Create a mapping from barcodes to status if needed
+    if add_status and status is not None:
+        barcode_to_status = dict(zip(processed_barcodes, status))
+    
+    # Add cluster assignments to AnnData object
+    cluster_col = f"{prefix}souporcell_cluster"
+    if verbose:
+        print(f"Adding Souporcell assignments to AnnData object as '{cluster_col}'")
+    
+    # Initialize with unassigned status
+    adata.obs[cluster_col] = "unassigned"
+    
+    # Count the number of cells assigned 
+    cells_assigned = 0
+    
+    # Iterate over AnnData barcodes and assign clusters
+    for idx, barcode in enumerate(adata.obs_names):
+        bc_key = extract_barcode_prefix(barcode)
+        
+        # Update cluster assignment if barcode is in Souporcell results
+        if bc_key in barcode_to_assignment:
+            adata.obs.loc[barcode, cluster_col] = barcode_to_assignment[bc_key]
+            cells_assigned += 1
+    
+    # Add status information if requested
+    if add_status and status is not None:
+        status_col_name = f"{prefix}souporcell_status"
+        if verbose:
+            print(f"Adding Souporcell status to AnnData object as '{status_col_name}'")
+        
+        # Initialize with unassigned status
+        adata.obs[status_col_name] = unassigned_status
+        
+        # Update status for cells present in Souporcell results
+        for idx, barcode in enumerate(adata.obs_names):
+            bc_key = extract_barcode_prefix(barcode)
+            
+            # Update status
+            if bc_key in barcode_to_status:
+                adata.obs.loc[barcode, status_col_name] = barcode_to_status[bc_key]
+        
+        # Create a singlet/doublet categorical column for filtering
+        is_doublet_col = f"{prefix}is_doublet"
+        adata.obs[is_doublet_col] = (adata.obs[status_col_name] == doublet_status)
+    
+    # if genome_file is provided, read and process it
+    if genome_file is not None:
+        if verbose:
+            print(f"Reading Souporcell genotype file: {genome_file}")
+        
+        try:
+            # This can be customized based on the format of your genotype file
+            genotypes_df = pd.read_csv(genome_file, sep='\t')
+            # TODO: Add genotype processing logic here
+            
+        except Exception as e:
+            print(f"Error reading genotype file: {str(e)}")
+    
+    # if counts_matrix_file is provided, read and process it
+    if counts_matrix_file is not None:
+        if verbose:
+            print(f"Reading Souporcell counts matrix file: {counts_matrix_file}")
+        
+        try:
+            # 
+            pass
+        except Exception as e:
+            print(f"Error reading counts matrix file: {str(e)}")
+    
+    if verbose:
+        print(f"Successfully assigned {cells_assigned} cells to Souporcell clusters")
+        if add_status and status is not None:
+            doublet_count = adata.obs[is_doublet_col].sum()
+            print(f"Identified {doublet_count} cells as doublets")
+    
+    return adata
