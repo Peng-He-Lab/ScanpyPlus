@@ -1197,3 +1197,353 @@ def SubclusterAll(adata, parent_key="leiden", resolution=0.3, result_key="leiden
 
         # Assign hierarchical labels to original adata
         adata.obs.loc[mask, result_key] = subcluster_labels
+def OverlapBarcode(adatas, samplename):
+    #Identify overlapping barcodes between samples
+    import pandas as pd
+    
+    barcode_dict = {}
+    for adata, sample in zip(adatas, samplename):
+        barcode_dict[sample] = pd.Index([i.split('-')[0] for i in adata.obs_names])
+    
+    overlap_matrix = pd.DataFrame(0, index=samplename, columns=samplename)
+    for i, sample1 in enumerate(samplename):
+        for j, sample2 in enumerate(samplename):
+            if i != j:
+                overlap = len(set(barcode_dict[sample1]).intersection(barcode_dict[sample2]))
+                overlap_matrix.loc[sample1, sample2] = overlap
+    
+    return {
+        'barcode_dict': barcode_dict,
+        'overlap_matrix': overlap_matrix,
+        'overlap_percentage': overlap_matrix.div(overlap_matrix.sum(axis=1), axis=0) * 100
+    }
+
+def show_graph_with_labels(adjacency_matrix, threshold=0.9):
+    #Display network graph from adjacency matrix
+    import networkx as nx
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    rows, cols = np.where(adjacency_matrix.values >= threshold)
+    gr = nx.Graph()
+    gr.add_edges_from(zip(rows.tolist(), cols.tolist()))
+    nx.draw(gr, node_size=100, 
+            labels={i: adjacency_matrix.index[i] for i in range(len(adjacency_matrix.index))}, 
+            with_labels=True)
+    plt.show()
+
+def DF2Ann(DF):
+    #Convert DataFrame to AnnData
+    import anndata
+    
+    return anndata.AnnData(DF)
+
+def UpSetFromLists(listOflist, labels, size_height=3, showplot=True):
+    #Create UpSet plot from list of lists
+    from upsetplot import UpSet
+    import pandas as pd
+    
+    listall = list(set([j for i in listOflist for j in i]))
+    temp = pd.Series(listall, index=listall)
+    temp2 = pd.concat([temp.isin(i) for i in listOflist], axis=1)
+    temp2.columns = labels
+    temp2 = temp2.set_index(labels)
+    upset = UpSet(temp2, subset_size='count', intersection_plot_elements=size_height)
+    if showplot:
+        upset.plot()
+    return upset
+
+def zscore(DF, dropna=True, axis=1):
+    #Calculate z-scores for DataFrame
+    import scipy.stats
+    import pandas as pd
+    
+    output = pd.DataFrame(scipy.stats.zscore(DF.values, axis=axis),
+                         index=DF.index, columns=DF.columns)
+    return output.dropna(axis=1-axis) if dropna else output
+
+def Ginni(beta):
+    #Calculate Gini coefficient for distributions
+    import numpy as np
+    
+    beta.loc['Ginni'] = [np.abs(np.subtract.outer(beta.loc[:,i].values, beta.loc[:,i].values)).mean() / 
+                         np.mean(beta.loc[:,i].values) * 0.5 for i in beta.columns]
+    return beta
+
+def cellphonedb_p2adjMat(cpdb_p_loc='pvalues.txt', pval=0.05):
+    #Convert CellPhoneDB p-values to adjacency matrix with significant pairs
+    import pandas as pd
+    
+    cpdb_p = pd.read_csv(cpdb_p_loc, sep='\t')
+    cellpairs = pd.Series(cpdb_p.iloc[0, 11:].index).str.split('|', expand=True)
+    cell0, cell1 = cellpairs.loc[:,0].unique(), cellpairs.loc[:,1].unique()
+    
+    InterMat = pd.DataFrame('', index=cell0, columns=cell1)
+    for i in cell0:
+        for j in cell1:
+            InterMat.loc[i,j] = '|'.join(cpdb_p.loc[cpdb_p.loc[:,i+'|'+j]<pval, 'interacting_pair'].tolist())
+    
+    InterMat.to_csv(cpdb_p_loc+'.pairs'+str(pval)+'.csv')
+    return InterMat
+
+def cellphonedb_n_interaction_Mat(cpdb_p_loc='pvalues.txt', pval=0.05):
+    #Count significant interactions between cell types
+    import pandas as pd
+    
+    cpdb_p = pd.read_csv(cpdb_p_loc, sep='\t')
+    cellpairs = pd.Series(cpdb_p.iloc[0, 11:].index).str.split('|', expand=True)
+    cell0, cell1 = cellpairs.loc[:,0].unique(), cellpairs.loc[:,1].unique()
+    
+    InterMat = pd.DataFrame(0, index=cell0, columns=cell1)
+    for i in cell0:
+        for j in cell1:
+            InterMat.loc[i,j] = len(cpdb_p.loc[cpdb_p.loc[:,i+'|'+j]<pval, 'interacting_pair'])
+    
+    InterMat.to_csv(cpdb_p_loc+'.n_pairs'+str(pval)+'.csv')
+    return InterMat
+
+def cellphonedb_mat_per_interaction(interacting_pair, cpdb_p_loc='pvalues.txt'):
+    #Get p-value matrix for specific interaction pair
+    import pandas as pd
+    import numpy as np
+    
+    cpdb_p = pd.read_csv(cpdb_p_loc, sep='\t')
+    cellpairs = pd.Series(cpdb_p.iloc[0, 11:].index).str.split('|', expand=True)
+    cell0, cell1 = cellpairs.loc[:,0].unique(), cellpairs.loc[:,1].unique()
+    
+    InterMat = pd.DataFrame(0, index=cell0, columns=cell1)
+    for i in cell0:
+        for j in cell1:
+            values = cpdb_p.loc[cpdb_p['interacting_pair']==interacting_pair, i+'|'+j].values
+            InterMat.loc[i,j] = values[0] if len(values) > 0 else np.nan
+    
+    InterMat.to_csv(cpdb_p_loc+'.pairs'+interacting_pair.replace('/', '_')+'.csv')
+    return InterMat
+
+def ListsOverlap(A, B):
+    #Calculate overlap counts between lists in A and B
+    import pandas as pd
+    
+    counts = [[len(set(a_list).intersection(b_list)) for b_list in B] for a_list in A]
+    return pd.DataFrame(counts, 
+                       columns=[f"B{i+1}" for i in range(len(B))], 
+                       index=[f"A{i+1}" for i in range(len(A))])
+
+def read_folder(base_dir, data_pattern="filtered_feature_bc_matrix.h5", dirs=None,
+                dir_pattern=None, dir_filter=None, batch_key='sample', concat=False,
+                save_counts=True, verbose=True, **kwargs):
+    #Load data from multiple directories
+    import fnmatch
+    import os
+    import scanpy as sc
+    import gc
+    
+    # Get subdirectories
+    all_subdirs = [d for d in os.listdir(base_dir) 
+                  if os.path.isdir(os.path.join(base_dir, d))]
+    
+    # Filter directories
+    if dirs is not None:
+        filtered_dirs = [d for d in all_subdirs if d in dirs]
+    elif dir_pattern is not None:
+        filtered_dirs = fnmatch.filter(all_subdirs, dir_pattern)
+    elif dir_filter is not None:
+        filtered_dirs = [d for d in all_subdirs if dir_filter(d)]
+    else:
+        filtered_dirs = all_subdirs
+    
+    if verbose:
+        print(f"Found {len(filtered_dirs)} directories to process")
+    
+    adatas = []
+    for idx, dir_name in enumerate(filtered_dirs):
+        if verbose:
+            print(f"Processing {idx+1}/{len(filtered_dirs)}: {dir_name}")
+        
+        dir_path = os.path.join(base_dir, dir_name)
+        data_file = None
+        
+        # Find data file
+        potential_file = os.path.join(dir_path, data_pattern)
+        if os.path.exists(potential_file):
+            data_file = potential_file
+        else:
+            for file in os.listdir(dir_path):
+                if fnmatch.fnmatch(file, data_pattern):
+                    data_file = os.path.join(dir_path, file)
+                    break
+        
+        if data_file is None:
+            if verbose:
+                print(f"Warning: No data file found in {dir_path}. Skipping.")
+            continue
+        
+        # Load data
+        try:
+            if data_file.endswith('.h5'):
+                adata = sc.read_10x_h5(data_file, **kwargs)
+            elif data_file.endswith(('.mtx', '.mtx.gz')):
+                adata = sc.read_10x_mtx(os.path.dirname(data_file), **kwargs)
+            else:
+                adata = sc.read(data_file, **kwargs)
+        except Exception as e:
+            if verbose:
+                print(f"Error loading {data_file}: {e}. Skipping.")
+            continue
+        
+        adata.var_names_make_unique()
+        if save_counts:
+            adata.layers["counts"] = adata.X.copy()
+        adata.obs[batch_key] = dir_name
+        adatas.append(adata)
+        
+        if verbose:
+            print(f"Added {dir_name}: {adata.n_obs} cells, {adata.n_vars} genes")
+        gc.collect()
+    
+    if concat and adatas:
+        if verbose:
+            print("Concatenating datasets...")
+        try:
+            return sc.concat(adatas, join='outer', index_unique='-')
+        except Exception as e:
+            print(f"Concatenation failed: {e}. Returning list.")
+            return adatas
+    return adatas
+
+def read_numbered_folders(base_dir, min_dir=1, max_dir=100, exclude_dirs=None, **kwargs):
+    #Load data from numbered directories
+    all_dirs = [str(i) for i in range(min_dir, max_dir + 1)]
+    
+    if exclude_dirs is not None:
+        exclude_dirs_str = [str(d) for d in exclude_dirs]
+        filtered_dirs = [d for d in all_dirs if d not in exclude_dirs_str]
+    else:
+        filtered_dirs = all_dirs
+    
+    return read_folder(base_dir, dirs=filtered_dirs, **kwargs)
+
+def run_celltypist(adata, model_name, output_prefix=None, majority_voting=True, 
+                   plot_umap=True, plot_size=10, figsize=(16, 16), legend_loc='on data',
+                   color_map=None, save_plot=True, plot_file_prefix=None, dpi=300, **kwargs):
+    #Run CellTypist annotation
+    try:
+        import celltypist
+        from celltypist import models
+    except ImportError:
+        raise ImportError("Install celltypist: pip install celltypist")
+    
+    import matplotlib.pyplot as plt
+    import matplotlib.colors
+    import scanpy as sc
+    
+    prefix = output_prefix if output_prefix else ""
+    
+    if plot_umap and 'X_umap' not in adata.obsm_keys():
+        print("Warning: No UMAP found. Skipping plots.")
+        plot_umap = False
+    
+    # Load model
+    try:
+        model = models.Model.load(model=model_name)
+    except:
+        try:
+            model = models.Model.load(model_file=model_name)
+        except:
+            raise ValueError(f"Cannot load model '{model_name}'")
+    
+    # Run annotation
+    result = celltypist.annotate(adata, model=model, majority_voting=majority_voting, **kwargs)
+    adata_annotated = result.to_adata()
+    
+    # Copy results
+    adata_annotated.obs[f'{prefix}predicted_labels'] = adata_annotated.obs['predicted_labels'].copy()
+    if majority_voting:
+        adata_annotated.obs[f'{prefix}majority_voting'] = adata_annotated.obs['majority_voting'].copy()
+    
+    # Plot if requested
+    if plot_umap:
+        if color_map is None:
+            color_map = list(matplotlib.colors.CSS4_COLORS.values())
+        
+        plot_prefix = plot_file_prefix or prefix or "celltypist"
+        
+        for col, suffix in [(f'{prefix}predicted_labels', 'predicted'),
+                           (f'{prefix}majority_voting', 'majority')] if majority_voting else \
+                          [(f'{prefix}predicted_labels', 'predicted')]:
+            fig, ax = plt.subplots(figsize=figsize)
+            sc.pl.umap(adata_annotated, color=[col], ax=ax, size=plot_size, 
+                      legend_loc=legend_loc, palette=color_map, show=False)
+            plt.tight_layout()
+            if save_plot:
+                plt.savefig(f'{plot_prefix}_{suffix}_umap.png', dpi=dpi, bbox_inches='tight')
+            plt.show()
+    
+    return adata_annotated
+
+def extract_barcode_prefix(barcode):
+    #Extract barcode prefix before '-'
+    return barcode.split('-')[0] if '-' in barcode else barcode
+
+def import_souporcell(adata, clusters_file, genome_file=None, counts_matrix_file=None,
+                     prefix='', barcode_col=0, assignment_col=1, status_col=2,
+                     add_status=True, doublet_status='doublet', unassigned_status='unassigned',
+                     verbose=True):
+    #Import Souporcell results into AnnData
+    import os
+    import pandas as pd
+    
+    # Check files
+    if not os.path.exists(clusters_file):
+        raise FileNotFoundError(f"Clusters file not found: {clusters_file}")
+    
+    if verbose:
+        print(f"Reading Souporcell clusters: {clusters_file}")
+    
+    # Read clusters
+    try:
+        clusters_df = pd.read_csv(clusters_file, sep='\t', header=None)
+        barcodes = clusters_df.iloc[:, barcode_col].values
+        assignments = clusters_df.iloc[:, assignment_col].values
+        status = clusters_df.iloc[:, status_col].values if add_status and status_col < clusters_df.shape[1] else None
+    except Exception as e:
+        if verbose:
+            print(f"Error reading file: {e}")
+        return adata
+    
+    # Process barcodes
+    processed_barcodes = [extract_barcode_prefix(bc) for bc in barcodes]
+    barcode_to_assignment = dict(zip(processed_barcodes, assignments))
+    
+    # Add assignments
+    cluster_col = f"{prefix}souporcell_cluster"
+    adata.obs[cluster_col] = "unassigned"
+    
+    cells_assigned = 0
+    for barcode in adata.obs_names:
+        bc_key = extract_barcode_prefix(barcode)
+        if bc_key in barcode_to_assignment:
+            adata.obs.loc[barcode, cluster_col] = barcode_to_assignment[bc_key]
+            cells_assigned += 1
+    
+    # Add status if requested
+    if add_status and status is not None:
+        barcode_to_status = dict(zip(processed_barcodes, status))
+        status_col_name = f"{prefix}souporcell_status"
+        adata.obs[status_col_name] = unassigned_status
+        
+        for barcode in adata.obs_names:
+            bc_key = extract_barcode_prefix(barcode)
+            if bc_key in barcode_to_status:
+                adata.obs.loc[barcode, status_col_name] = barcode_to_status[bc_key]
+        
+        adata.obs[f"{prefix}is_doublet"] = (adata.obs[status_col_name] == doublet_status)
+        
+        if verbose:
+            doublet_count = adata.obs[f"{prefix}is_doublet"].sum()
+            print(f"Found {doublet_count} doublets")
+    
+    if verbose:
+        print(f"Assigned {cells_assigned} cells to clusters")
+    
+    return adata
