@@ -1,9 +1,9 @@
-# python-genomics
-A set of files to do genomics analysis in python
+# ScanpyPlus
+A set of files to do single-cell analysis in python
 
 To use any of these script collections, just run these two lines in your *python kernel / Jupyter notebook*:
 ```
-sys.path.append('/home/ubuntu/tools/python-genomics')
+sys.path.append('/home/ubuntu/tools/ScanpyPlus')
 import Scanpyplus
 ```
 ## Citation:
