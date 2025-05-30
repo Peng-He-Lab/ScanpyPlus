@@ -557,7 +557,7 @@ min_clustersize=100,genenames=['default']):
         adata_sample = adata[adata.obs[batch_key]==key,:][:,genenames]
         print(key)
         sc.pp.highly_variable_genes(adata_sample, min_mean=min_mean, max_mean=max_mean, min_disp=min_disp)
-        adata.var['highly_variable'+key]=pd.Series(adata.var_names,\
+        adata.var['highly_variable'+'_'+key]=pd.Series(adata.var_names,\
             index=adata.var_names).isin(adata_sample.var_names[adata_sample.var['highly_variable']])
     sc.settings.verbosity=3
     adata.var['highly_variable_n']=0
