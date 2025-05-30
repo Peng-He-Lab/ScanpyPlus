@@ -987,7 +987,7 @@ def Model2Coeff(model_pkl,genelistcsv):
 
 from datetime import date
 def LogisticRegressionCellType(Reference, Query, Category = 'louvain', DoValidate = False,\
-    multi_class='ovr',n_jobs=15,max_iter=1000,tol=1e-4,keyword=''):
+    multi_class='ovr',n_jobs=15,max_iter=1000,C=0.2,tol=1e-4,keyword=''):
     #This function doesn't do normalization or scaling
     #The logistic regression function returns the updated Query object with predicted info stored
     Reference.var_names_make_unique()
@@ -1001,7 +1001,7 @@ def LogisticRegressionCellType(Reference, Query, Category = 'louvain', DoValidat
     cv = StratifiedKFold(n_splits=5, random_state=None, shuffle=False)
     logit = LogisticRegression(penalty='l2',
                            random_state=42,
-                           C=0.2,
+                           C=C,
                            tol=tol,
                            n_jobs=n_jobs,
                            solver='sag',
@@ -1020,9 +1020,45 @@ def LogisticRegressionCellType(Reference, Query, Category = 'louvain', DoValidat
     Query.obs['Predicted'] = y_predict
     return Query
 
-def LogisticPrediction(adata,model_pkl,genelistcsv,scores=True):
-    #This function imports saved logistic model and gene list csv to predict cell types for adata
-    #adata has better been scaled if you trained a model using scaled AnnData
+def LogisticPrediction(adata, model_pkl, genelistcsv, scores=True, compute_umap=False,
+                      n_neighbors=15, n_pcs=40, metric='euclidean', 
+                      min_dist=0.5, spread=1.0, random_state=0):
+    """
+    This function imports saved logistic model and gene list csv to predict cell types for adata
+    adata has better been scaled if you trained a model using scaled AnnData
+    
+    Parameters:
+    -----------
+    adata : AnnData
+        Annotated data object
+    model_pkl : str
+        Path to saved logistic regression model
+    genelistcsv : str
+        Path to gene list CSV file
+    scores : bool, default=True
+        Whether to return logistic scores
+    compute_umap : bool, default=False
+        Whether to compute UMAP on logistic scores
+    n_neighbors : int, default=15
+        Number of neighbors for neighbor graph computation
+    n_pcs : int, default=40
+        Number of principal components to use
+    metric : str, default='euclidean'
+        Distance metric for neighbor computation
+    min_dist : float, default=0.5
+        Minimum distance for UMAP
+    spread : float, default=1.0
+        Spread parameter for UMAP
+    random_state : int, default=0
+        Random state for reproducibility
+    
+    Returns:
+    --------
+    AnnData object with predictions and optionally logistic scores and UMAP coordinates
+
+    UMAP feature written by Alex :)
+    """
+    
     CT_genes = LoadLogitGenes(genelistcsv)
     lr = LoadLogitModel(model_pkl)
     lr.features = CT_genes
@@ -1030,20 +1066,47 @@ def LogisticPrediction(adata,model_pkl,genelistcsv,scores=True):
     k_x = features.isin(list(CT_genes))
     print(f'{k_x.sum()} features used for prediction', file=sys.stderr)
     k_x_idx = np.where(k_x)[0]
-    temp=adata
+    temp = adata
     X = temp.X[:, k_x_idx]
     features = features[k_x]
     ad_ft = pd.DataFrame(features.values, columns=['ad_features']).reset_index().rename(columns={'index': 'ad_idx'})
     lr_ft = pd.DataFrame(lr.features, columns=['lr_features']).reset_index().rename(columns={'index': 'lr_idx'})
     lr_idx = lr_ft.merge(ad_ft, left_on='lr_features', right_on='ad_features').sort_values(by='ad_idx').lr_idx.values
-
     lr.n_features_in_ = lr_idx.size
     lr.features = lr.features[lr_idx]
     lr.coef_ = lr.coef_[:, lr_idx]
     predicted_hi = lr.predict(X)
     adata.obs['Predicted'] = predicted_hi
+    
+    # Extract logistic scores for UMAP computation
+    if compute_umap or scores:
+        logit_scores = ExtractLogitScores(adata, lr, CT_genes)
+    
+    # Compute UMAP on logistic scores if requested
+    if compute_umap:
+        print("Computing UMAP on logistic regression scores...", file=sys.stderr)
+        # Create temporary AnnData object with logit scores as X
+        temp_adata = sc.AnnData(X=logit_scores)
+        temp_adata.obs_names = adata.obs_names
+        
+        # Compute neighbors on logit scores with custom parameters
+        sc.pp.neighbors(temp_adata, use_rep='X', n_neighbors=n_neighbors, 
+                       n_pcs=n_pcs, metric=metric, random_state=random_state)
+        
+        # Compute UMAP on logit scores with custom parameters
+        sc.tl.umap(temp_adata, min_dist=min_dist, spread=spread, random_state=random_state)
+        
+        # Save UMAP coordinates back to original adata
+        adata.obsm['X_umap'] = temp_adata.obsm['X_umap']
+        print(f"UMAP coordinates (from logit scores) saved to adata.obsm['X_umap'] with shape {adata.obsm['X_umap'].shape}", 
+              file=sys.stderr)
+    
+    # Return with or without scores
     if scores:
-        return AddMeta(adata,ExtractLogitScores(adata,lr,CT_genes))
+        if compute_umap:
+            return AddMeta(adata, logit_scores)  # Reuse already computed scores
+        else:
+            return AddMeta(adata, ExtractLogitScores(adata, lr, CT_genes))
     else:
         return adata
 
