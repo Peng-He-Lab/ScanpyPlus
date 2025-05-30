@@ -922,11 +922,11 @@ def DeepTree_per_batch(adata,batch_key='batch',obslist=['batch'],min_clustersize
     adata.var['Deep_n']=temp
     return adata
 
-def Venn_Upset(adata,genelists,size_height=3):
+def HVG_Venn_Upset(adata,genelists,size_height=3):
     from upsetplot import UpSet
     from upsetplot import plot
     #gene lists can be ['Deep_1','Deep_2']
-    deepgenes=pd.DataFrame(adata.var[genelists+['highly_variable']])
+    deepgenes=pd.DataFrame(adata.var[['highly_variable_']+genelists])
     deepgenes=deepgenes.set_index(genelists)
     upset = UpSet(deepgenes, subset_size='count', intersection_plot_elements=size_height)
     upset.plot()
