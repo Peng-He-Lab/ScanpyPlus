@@ -929,7 +929,6 @@ def HVG_Venn_Upset(adata,genelists,size_height=3):
     deepgenes=pd.DataFrame(adata.var[['highly_variable_']+genelists])
     deepgenes=deepgenes.set_index(genelists)
     upset = UpSet(deepgenes, subset_size='count', intersection_plot_elements=size_height)
-    upset.plot()
     return upset
 
 def Treemap(adata,output="temp",branchlist=['project','batch'],width=1000,height=700,title='title'):
