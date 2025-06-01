@@ -563,7 +563,7 @@ min_clustersize=100,genenames=['default']):
     adata.var['highly_variable_n']=0
     temp=adata.var['highly_variable_n'].astype('int32')
     for key in batchlist[batchlist>min_clustersize].index:
-        temp=temp+adata.var['highly_variable'+key].astype('int32')
+        temp=temp+adata.var['highly_variable_'+key].astype('int32')
     adata.var['highly_variable_n']=temp
     return adata
 
@@ -904,14 +904,14 @@ def DeepTree_per_batch(adata,batch_key='batch',obslist=['batch'],min_clustersize
     batchlist=adata.obs[batch_key].value_counts()
     for key in batchlist[batchlist>min_clustersize].index:
         print(key)
-        bdata=adata[:,adata.var['highly_variable'+key]][adata.obs[batch_key]==key,:]
+        bdata=adata[:,adata.var['highly_variable_'+key]][adata.obs[batch_key]==key,:]
         sc.pp.filter_genes(bdata,min_cells=3)
         sc.pl.umap(bdata,color=obslist)
         [bdata,test, test1, test2]=DeepTree(bdata,
                         MouseC1ColorDict2={False:'#000000',True:'#00FFFF'},
                         cell_type=obslist,
                         cellnames=adata[adata.obs[batch_key]==key,:].obs_names.tolist(),
-                        genenames=adata[:,adata.var['highly_variable'+key]].var_names.tolist(),
+                        genenames=adata[:,adata.var['highly_variable_'+key]].var_names.tolist(),
                          row_cluster=True,col_cluster=True,Cutoff=Cutoff,CladeSize=CladeSize)
         adata.var['Deep_'+key]=pd.Series(adata.var_names,index=adata.var_names).isin((bdata)[:,bdata.var['Deep']].var_names)
 #        sc.pl.umap(adata,color=obslist)
@@ -926,7 +926,7 @@ def HVG_Venn_Upset(adata,genelists,size_height=3):
     from upsetplot import UpSet
     from upsetplot import plot
     #gene lists can be ['Deep_1','Deep_2']
-    deepgenes=pd.DataFrame(adata.var[['highly_variable_']+genelists])
+    deepgenes=pd.DataFrame(adata.var[['highly_variable']+genelists])
     deepgenes=deepgenes.set_index(genelists)
     upset = UpSet(deepgenes, subset_size='count', intersection_plot_elements=size_height)
     return upset
@@ -959,7 +959,7 @@ def DeepTree2(adata,method='complete',metric='correlation',cellnames=['default']
     DeepIndex=[i in TreeDF.loc[:,TreeDF.iloc[0,:] > CladeSize].columns.values for i in testscipy]
     bdata=adata[cellnames,:][:,genenames]
     bdata.var['Deep']=DeepIndex
-    return bdata
+    return bdata                 
 
 def LoadLogitModel(model_addr):
     import joblib
