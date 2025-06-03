@@ -1609,3 +1609,122 @@ def import_souporcell(adata, clusters_file, genome_file=None, counts_matrix_file
         print(f"Assigned {cells_assigned} cells to clusters")
     
     return adata
+def iStar_extract_locs_raw(adata, output_path="locs-raw.tsv"):
+    """
+    Extracts spatial coordinates and saves as `locs-raw.tsv`.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data object with spatial info in `adata.obsm["spatial"]`.
+    output_path : str
+        Path to save the output TSV file.
+
+    Returns
+    -------
+    str : Output path
+    """
+    import pandas as pd
+
+    df = pd.DataFrame(adata.obsm["spatial"], index=adata.obs.index, columns=["x", "y"])
+    df.insert(0, "Spot_ID", df.index)
+    df.to_csv(output_path, sep="\t", index=False)
+    return output_path
+
+
+def iStar_extract_counts_raw(adata, output_path="cnts.tsv"):
+    """
+    Extracts expression matrix and saves as `cnts.tsv`.
+
+    Parameters
+    ----------
+    adata : AnnData
+        AnnData object with `.X` as count matrix.
+    output_path : str
+        Path to save the output TSV file.
+
+    Returns
+    -------
+    str : Output path
+    """
+    import pandas as pd
+
+    matrix = adata.X.toarray() if hasattr(adata.X, "toarray") else adata.X
+    df = pd.DataFrame(matrix, index=adata.obs.index, columns=adata.var.index)
+    df.insert(0, "Spot_ID", df.index)
+    df.to_csv(output_path, sep="\t", index=False)
+    return output_path
+
+
+def iStar_extract_scalefactors(adata, formatted_name, pixel_file="pixel-size-raw.txt", radius_file="radius-raw.txt"):
+    """
+    Extracts pixel size and radius from spatial scalefactors.
+
+    Parameters
+    ----------
+    adata : AnnData
+        AnnData object with `adata.uns['spatial'][formatted_name]['scalefactors']`.
+    formatted_name : str
+        Sample key used in `adata.uns['spatial']`.
+    pixel_file : str
+        Output file for pixel size.
+    radius_file : str
+        Output file for radius.
+
+    Returns
+    -------
+    tuple[str, str] : Paths to the saved files
+    """
+    scalefactors = adata.uns['spatial'][formatted_name]['scalefactors']
+    pixel_size_raw = (8000 / 2000) * scalefactors["tissue_hires_scalef"]
+    radius_raw = scalefactors["spot_diameter_fullres"] * 0.5
+
+    with open(pixel_file, "w") as f:
+        f.write(str(pixel_size_raw))
+    with open(radius_file, "w") as f:
+        f.write(str(radius_raw))
+
+    return pixel_file, radius_file
+
+
+def iStar_generate_all_inputs(h5ad_path, formatted_name, output_dir="."):
+    """
+    Main function to extract all iStar input files from a `.h5ad` file.
+
+    Parameters
+    ----------
+    h5ad_path : str
+        Path to the input `.h5ad` file.
+    formatted_name : str
+        Sample name key used inside `adata.uns["spatial"]`.
+    output_dir : str
+        Output directory for the generated files.
+
+    Returns
+    -------
+    dict : File paths for each output.
+    """
+    import scanpy as sc
+    import os
+
+    if not h5ad_path.endswith(".h5ad"):
+        h5ad_path += ".h5ad"
+    adata = sc.read_h5ad(h5ad_path)
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    locs_path = os.path.join(output_dir, "locs-raw.tsv")
+    cnts_path = os.path.join(output_dir, "cnts.tsv")
+    pixel_path = os.path.join(output_dir, "pixel-size-raw.txt")
+    radius_path = os.path.join(output_dir, "radius-raw.txt")
+
+    iStar_extract_locs_raw(adata, locs_path)
+    iStar_extract_counts_raw(adata, cnts_path)
+    iStar_extract_scalefactors(adata, formatted_name, pixel_path, radius_path)
+
+    return {
+        "locs-raw.tsv": locs_path,
+        "cnts.tsv": cnts_path,
+        "pixel-size-raw.txt": pixel_path,
+        "radius-raw.txt": radius_path,
+    }
