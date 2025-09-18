@@ -2,7 +2,7 @@
 A set of files to do single-cell analysis in python
 
 To use any of these script collections, just run these two lines in your *python kernel / Jupyter notebook*:
-```
+```python
 sys.path.append('/home/ubuntu/tools/ScanpyPlus')
 import Scanpyplus
 ```
@@ -41,52 +41,110 @@ To leverage the input from biologists' manual parsing and the increased sensitiv
 
 ### An alternative way to call doublet subclusters based on *Scrublet* and [the gastrulation paper](https://www.nature.com/articles/s41586-019-0933-9)
 `Bertie(adata,Resln=1,batch_key='batch')` was written with the help from [K. Polanski](https://github.com/ktpolanski). This script aggregates *Scrublet* scores from subclusters and makes threshold cuts based on subcluster p-values. And this is done batch by batch.
+```python
+Scanpyplus.Bertie(adata, Resln=1, batch_key='sample')
+```
+A variant version `Bertie_preclustered` applies the same subcluster-enrichment logic using an existing cluster assignment (e.g., Leiden).
+```python
+Scanpyplus.Bertie_preclustered(adata, cluster_key='leiden', batch_key='donor')
+```
 
-A variant version `Bertie_preclustered` allows users to use user-defined clusters to calculate p-values. This is also done batch by batch.
-
-### Manipulating colors:
+### Color utilities:
 You can extract the color dict of a variable from an anndata object using `ExtractColor(adata,obsKey='louvain',keytype=int)`, 
 
-and manipulate the color dict using `UpdateUnsColor`. 
+and manually edit the color dict, and then use it to update colors in `adata.uns` using `UpdateUnsColor`.
 
-You can also cherry pick a value of a variable and make it white using `MakeWhite`.
+```python
+Scanpyplus.UpdateUnsColor(adata, 'cell_type', {'T cell':'#1f77b4', 'B cell':'#ff7f0e'})
+```
 
-### Manipulating obs (observation) names and metadata:
+You can also force a category to render white using `MakeWhite`
+```python
+Scanpyplus.MakeWhite(adata, 'condition', value='background')
+```
+
+### Metadata / obs (observation) helpers:
 You can plot sankey graph between two variables of an anndata object using `ScanpySankey`. 
 
-Re-ordering the cluster IDs based on relationship rather than size can be done by `orderGroups`.
+```python
+Scanpyplus.ScanpySankey(adata, 'louvain', 'cell_type')
+```
+
+`orderGroups(adata, obsKey, new_order)` → reorder category levels.
+```python
+Scanpyplus.orderGroups(adata, 'louvain', ['0','2','1','3'])
+```
 
 `remove_barcode_suffix` removes the suffix after the '-' in the cell (barcode) name.
+```python
+Scanpyplus.remove_barcode_suffix(adata)
+```
 
 `CopyMeta` copies the metadata (both obs and var) from one object to another.
+```python
+Scanpyplus.CopyMeta(ref, query, obs_keys=['cell_type', 'donor'])
+```
 
 `AddMeta` stores a dataframe of obs values per each cell into an object.
+```python
+Scanpyplus.AddMeta(adata, df)
+```
 
 `AddMetaBatch` reads a dataframe of obs values per batch into an object. This format of metadata (rows are batch names, columns are obs categories) is more common, compact and human readable that is usually stored in *Excel* spreadsheets.
+```python
+Scanpyplus.AddMetaBatch(adata, batch_table, batch_key='donor', on='cell_type')
+```
 
-### Manipulating var (variable) names metadata:
+### Gene / var (variable)  metadata:
 `OrthoTranslate` translates mouse genes to human orthologs and filter out poorly conserved genes, based on ortholog table that can be derived from Biomart etc.
 
 ### Converting file types:
 `file2gz` creates .gz files which is useful for creating artificial 10X files.
+```python3
+Scanpyplus.file2gz('matrix.mtx')
+```
 
 `Scanpy2MM` saves an *anndata* into *MatrixMarket* form.
+```python3
+Scanpyplus.Scanpy2MM(adata, 'mm_out', layer='counts')
+```
 
 `mtx2df` reads *MatrixMarket* files into a dataframe.
+```python
+Scanpyplus.mtx2df('matrix.mtx', 'features.tsv', 'barcodes.tsv')
+```
 
-### Manipulating matrix:
-Transfer the raw layer to the default layer by `GetRaw` and calculate integer raw counts based on `n_counts` 
+### Matrix utilities:
+`GetRaw` copy .raw (or layer) to .X 
+```python
+Scanpyplus.GetRaw(adata)
+```
 
-and log-transformed counts using `CalculateRaw`.
+ `CalculateRaw` → rebuild a raw count matrix from log-transformed counts based on `n_counts` 
+```python
+Scanpyplus.CalculateRaw(adata, counts_key='n_counts', log1p=True)
+```
 
 For large matrices, cells can be `DownSample`d based on labels such as cell types.
+```python
+Scanpyplus.DownSample(adata, 'cell_type', n_per_group=500)
+```
 
 Sometimes `PseudoBulk` profiles are also useful to generate, whether it's the mean, median or max.
+```python
+Scanpyplus.PseudoBulk(adata, groupby='sample', layer='counts')
+```
 
-### Manipulating obsm embedding coordinates:
+### Embedding utilities:
 `ShiftEmbedding` creates a platter that juxtaposes subsets of the data (batches, stages etc.) to visualize side by side.
+```python
+Scanpyplus.ShiftEmbedding(adata, 'batch', obsm_key='X_umap')
+```
 
 `CopyEmbedding` copies the embedding of one object to another.
+```python
+Scanpyplus.CopyEmbedding(ref, query, obsm_key='X_umap')
+```
 
 ### Plotting stacked barplots of cell-type/condition proportions:
 `celltype_per_stage_plot` and `stage_per_celltype_plot` plot horizontal and vertical bar plots respectively based on two metadata variables (cell type and stage, for example).
@@ -96,7 +154,7 @@ Sometimes `PseudoBulk` profiles are also useful to generate, whether it's the me
 
 
 ### Gene-level calculation and plotting:
-`DEmarkers` calculates, filteres and plots differentially expressed genes between two populations.
+`DEmarkers` calculates, filters and plots differentially expressed genes between two populations.
 
 `GlobalMarkers` calculates marker genes for every cell cluster and filters them.
 
@@ -104,8 +162,11 @@ Sometimes `PseudoBulk` profiles are also useful to generate, whether it's the me
 
 `Dotplot2D` plots the expression levels of a gene across two metadata categories (e.g. samples and cell types). It can be used to trace maternal contimation by plotting XIST and check a key gene's expression patterns against cell types and age etc.
 
-### Plotting Seaborn plots:
+### Seaborn utilities:
 `snsSplitViolin` plots splitviolin plots for two populations.
+```python
+Scanpyplus.snsSplitViolin(adata, 'GATA3', 'cell_type', 'condition')
+```
 
 `snsCluster` plots clustermaps using an *anndata object* as input. This has been helped by Bao Zhang from [Zhang lab](https://github.com/ZhangHongbo-Lab)
 
@@ -113,7 +174,7 @@ Sometimes `PseudoBulk` profiles are also useful to generate, whether it's the me
 
 `extractSeabornRows` extracts the rowlabels of a *Seaborn object* and saves into a *Series*.
 
-### Plotting Venn diagram:
+### Plotting Venn / UpSet diagram:
 `Venn_Upset` can be used to directly plot upset plots (bar plots of each category of intersections).
 
 ### Label transfer:
