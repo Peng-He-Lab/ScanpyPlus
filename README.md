@@ -22,6 +22,21 @@ A *MATLAB* implementation can be found [here](https://github.com/brianpenghe/Mat
 
 This algorithm can be potentially used to reduce batch effect when fearing overcorrection, especially comparing conditions or time points. Two notebooks are provided showing "soft integration" of [embryonic limb](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/Soft_integration_limb.ipynb) and [pancreas](https://nbviewer.jupyter.org/github/Peng-He-Lab/ScanpyPlus/tree/master/Soft_integration_pancreas.ipynb) data.
 
+More conventionally, `HVGbyBatch` calls `sc.pp.highly_variable_genes` per batch, stores per-batch boolean flags and an aggregate count `highly_variable_n`
+```python
+Scanpyplus.HVGbyBatch(adata, batch_key='sample', min_disp=0.5)
+```
+
+`HVG_cutoff(adata, range_int=10, cutoff=5000, HVG_var='highly_variable_n', fig_size=(8,6))` Plots HVG count vs. threshold and prints the minimal threshold meeting your target count. This can also be used to determine the n for DeepTree-derived genes across multiple samples.
+```python
+i = Scanpyplus.HVG_cutoff(adata, cutoff=5000)
+```
+
+`HVG_Venn_Upset` compares HVG sets across provided flags (e.g., per-batch).
+```python
+Scanpyplus.HVG_Venn_Upset(adata, ['highly_variable_A','highly_variable_B'])
+```
+
 ## Doublet Cluster Labeling (DouCLing)
 ![unnamed](https://user-images.githubusercontent.com/4110443/146441371-e7b4bec2-9e87-4a9d-98ad-3f3401ce13ed.jpg)
 
@@ -125,6 +140,16 @@ Scanpyplus.GetRaw(adata)
 Scanpyplus.CalculateRaw(adata, counts_key='n_counts', log1p=True)
 ```
 
+`CheckGAPDH` Quickly inspects first few entries for a given gene, optionally from a sparse matrix.
+```python
+Scanpyplus.CheckGAPDH(adata, sparse=True, gene='GAPDH')
+```
+
+`FindSimilarGenes` Computes gene–gene correlations and returns a sorted similarity series.
+```python
+Scanpyplus.FindSimilarGenes(adata, genename='XIST')
+```
+
 For large matrices, cells can be `DownSample`d based on labels such as cell types.
 ```python
 Scanpyplus.DownSample(adata, 'cell_type', n_per_group=500)
@@ -149,14 +174,24 @@ Scanpyplus.CopyEmbedding(ref, query, obsm_key='X_umap')
 ### Plotting stacked barplots of cell-type/condition proportions:
 `celltype_per_stage_plot` and `stage_per_celltype_plot` plot horizontal and vertical bar plots respectively based on two metadata variables (cell type and stage, for example).
 
-### Plot 3D UMAP:
+### UMAP plotting utilities:
 `Plot3DimUMAP` generates a 3D plot (by *plotly*) of the UMAP after sc.tl.umap produces the 3D coordinates.
 
+`plot_umap_with_labels` Plots UMAP with categorical labels drawn on top; auto-adjusts text to avoid overlap and saves PNG/PDF.
+```python
+Scanpyplus.plot_umap_with_labels(adata, 'cell_type', 'plot.png', 'plot.pdf')
+```
 
 ### Gene-level calculation and plotting:
 `DEmarkers` calculates, filters and plots differentially expressed genes between two populations.
 
 `GlobalMarkers` calculates marker genes for every cell cluster and filters them.
+
+
+`GPT_annotation_genes` Ranks genes per cluster (Wilcoxon) and returns a formatted text prompt listing top markers per cluster for quick human/GPT annotation.  
+```python
+Scanpyplus.GPT_annotation_genes(adata, leiden_key='leiden', top_n=10)
+```
 
 `ClusterGenes` transposes a log-transformed *adata* object and performs clustering and dimension reduction to classify genes.
 
@@ -176,6 +211,13 @@ Scanpyplus.snsSplitViolin(adata, 'GATA3', 'cell_type', 'condition')
 
 ### Plotting Venn / UpSet diagram:
 `Venn_Upset` can be used to directly plot upset plots (bar plots of each category of intersections).
+
+### Treemap:
+`Treemap(adata, output='temp', branchlist=['project','batch'], width=1000, height=700, title='title')`
+Treemap of obs counts by hierarchical categories; saves PDF and CSV.
+```python
+Scanpyplus.Treemap(adata, output='out/treemap', branchlist=['donor','cell_type'])
+```
 
 ### Label transfer:
 `LogisticRegressionCellType` can learn the defining features of a variable (such as cell type) of the reference object and predict the corresponding labels of a query object. 
