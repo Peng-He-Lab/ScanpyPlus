@@ -1,0 +1,10 @@
+{
+  "hcka_v1": {
+    "sc_genes": ["EEF1A1", "TPT1", "FTH1", "FTL", "SERF2", "ATP5F1E", "GAPDH", "UBA52", "COX7C", "MIF"],
+    "sn_genes": ["FTX", "AGAP1", "GMDS-DT", "PARD3", "WWOX", "MAGI2", "PKHD1", "NHS", "AC098829.1", "DPP6"],
+    "source": "Kidney_integration/notebooks/CellorNuc.ipynb: RandomForestClassifier feature importance (sc vs sn suspension_type, MT-/RP- genes excluded) on concatenated HCKA_sc + HCKA_sn, cross-referenced with sc_det_rate - sn_det_rate (delta_detection) and pyDESeq2 sn-vs-sc pseudobulk log2FoldChange (shrunk, batch-controlled). sc_genes = top delta_detection/log2FC genes enriched in single-cell; sn_genes = top genes enriched in single-nucleus.",
+    "n_donors_source": "HCKA (Human Kidney Cell Atlas) sc + sn objects, /mnt/dev1/HCKA_sc.h5ad and /mnt/dev1/HCKA_sn.h5ad",
+    "date_extracted": "2026-08-10",
+    "status": "provisional - pre statistical validation, see analysis/validate_sn_stability.py"
+  }
+}
