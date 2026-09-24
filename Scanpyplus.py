@@ -1374,7 +1374,7 @@ def LoadGeneSignatures(signature='hcka_v1', path=None):
     Example
     -------
     sc_genes, sn_genes = Scanpyplus.LoadGeneSignatures()
-    Scanpyplus.CellorNuc(adata, sc_genes, sn_genes)
+    Scanpyplus.CellOrNuc(adata, sc_genes, sn_genes)
     """
     import json
     if path is None:
@@ -1390,7 +1390,7 @@ def LoadGeneSignatures(signature='hcka_v1', path=None):
     sig = signatures[signature]
     return sig['sc_genes'], sig['sn_genes']
 
-def CellorNuc(
+def CellOrNuc(
     adata,
     sc_genes,
     sn_genes,
@@ -1502,7 +1502,7 @@ def CellorNuc(
 
     return adata if copy else None
 
-##################################### CellorNucEM ##########################
+##################################### CellOrNucEM ##########################
 ############################################################################
 # ------------------------------------------------------------------ helpers
 def _set_counts_EM(adata, genes, layer=None):
@@ -1645,7 +1645,7 @@ def _posterior_cell_EM(x, m, fit):
     return np.exp(l1 - logsumexp(np.stack([l1, l0]), axis=0))
 
 # ------------------------------------------------------------------ main
-def CellorNucEM(
+def CellOrNucEM(
     adata,
     sc_genes,
     sn_genes,
